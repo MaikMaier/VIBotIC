@@ -1,4 +1,4 @@
-   public class BotLogic{
+    public class BotLogic{
     	private Connection connection = null;  
 
 //    	Prices
@@ -104,7 +104,35 @@
     			}
     			startGuessing(user);
     			return;
-    		}	
+    		}
+    		
+    		// !start <whattoguess>
+    		if(words[0].equalsIgnoreCase("!start") && (words.length == 2)){
+    			if(!user.isModerator() && !user.isAdmin()){
+    				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to start a new round of guessing.");
+    				return;
+    			}
+    			if(words[1].equalsIgnoreCase("death")){
+    				whatIsGuessed = 1;
+    				startSpecificGuessing(user);
+    				return;
+    			}
+    			if(words[1].equalsIgnoreCase("kills")){
+    				whatIsGuessed = 2;
+    				startSpecificGuessing(user);
+    				return;
+    			}
+    			if(words[1].equalsIgnoreCase("gpm")){
+    				whatIsGuessed = 3;
+    				startSpecificGuessing(user);
+    				return;
+    			}
+    			if(words[1].equalsIgnoreCase("xpm")){
+    				whatIsGuessed = 4;
+    				startSpecificGuessing(user);
+    				return;
+    			}
+    		}
     		
     		// !guess
     		if(words[0].equalsIgnoreCase("!guess") && (words.length == 2)){
@@ -435,17 +463,39 @@
 //        	301
         	sendGuessingLockedMessage(300, user, guessroundID);
 //        	300
-    	}	
+    	}
+    	
+    	public void startSpecificGuessing(User user){
+        	if(guessingroundActive){
+        		sendMessage(user.getChannel(), "Hey " + user.nick + ", there's already a round of guessing active. Please end this first with !result <number> or !abort it");
+    			return;
+       		}
+        	sendMessage(user.getChannel(), "/subscribers");
+        	sendMessage(user.getChannel(), "A new round of guessing has started. Viewers can now guess the outcome of the current game");
+        	startBettingPhase();
+        	sendGuessPhaseStartMessage(whatIsGuessed, user);
+        	sendMessage(user.getChannel(), "You can now use the command !guess <number> to make a guess. ");
+        	writeLater(7, "/me Good luck, let's go!", user, guessroundID);
+        	writeLater(8, "/subscribersoff", user, guessroundID);
+        	writeLater(180, "/me 2 Minutes left to place your guess", user, guessroundID);
+//        	180
+        	writeLater(240, "/me 1 Minute left to place your guess", user, guessroundID);
+//        	240
+        	delayEndBettingPhase(301, guessroundID);
+//        	301
+        	sendGuessingLockedMessage(300, user, guessroundID);
+//        	300
+    	}
 
     	public void sendGuessPhaseStartMessage(int whatIsGuessed, User user){
     		if(whatIsGuessed == 1){
-    			sendMessage(user.getChannel(), "How often will VITALIC die?");
+    			sendMessage(user.getChannel(), "/me How often will VITALIC die?");
     		}else if(whatIsGuessed == 2){
-    			sendMessage(user.getChannel(), "return How many kills will VITALIC achieve?");
+    			sendMessage(user.getChannel(), "/me How many kills will VITALIC achieve?");
     		}else if(whatIsGuessed == 3){
-    			sendMessage(user.getChannel(), "How much GPM will VITALIC achieve in this game? Every guess is allowed to be up to 25 points off of the result to be accepted as correct.");
+    			sendMessage(user.getChannel(), "/me How much GPM will VITALIC achieve in this game? Every guess is allowed to be up to 25 points off of the result to be accepted as correct.");
     		}else if(whatIsGuessed == 4){
-    			sendMessage(user.getChannel(), "How much XPM will VITALIC achieve in this game? Every guess is allowed to be up to 25 points off of the result to be accepted as correct.");
+    			sendMessage(user.getChannel(), "/me How much XPM will VITALIC achieve in this game? Every guess is allowed to be up to 25 points off of the result to be accepted as correct.");
     		}
     	}
     	
