@@ -1,28 +1,4 @@
-   public class BotLogic{
-    	private Connection connection = null;  
-
-//    	Prices
-    	final Integer POINTS_ON_CORRECT_GUESS = 100;
-    	final Integer HEROREQUEST_PRICE = 500;
-    	final Integer ITEMBUNDLE_PRICE = 1000;
-    	final Integer REPLAYANALYSIS_PRICE = 1000;
-    	
-//    	Guessingstatus related
-    	boolean guessingroundActive;
-    	int whatIsGuessed;
-		boolean guessLock = true;
-		int guessCount = 0;
-		int guessroundID = 0;
-    	
-//		Reward related
-		boolean herorequestActive;
-		String requestedHero;
-		int herorequestID = 0;
-		
-    	/**
-        * Constructor that opens the DB-Connection
-        */
-    	public BotLogic(){
+  	public BotLogic(){
     		try {
 				Class.forName( "org.sqlite.JDBC" );
 				connection = DriverManager.getConnection( "jdbc:sqlite:./BotDB.db", "", "" );
@@ -35,183 +11,188 @@
     	
     	 /**
          * Method that handles incoming messages
-         * which method is handled is written in commands above the if()
+         * which method is handled is wr7itten in commands above the if()
          */
     	public void newMessage(User user, String message) {
     		// IMPORTANT: OPERATIONS HERE ARE BEFORE SPLITTING TO WORDS   		    		
     		// blocking spam links containing ".af/"
-    		if(message.contains(".af/")){
-    			sendMessage(user.getChannel(), "/timeout " + user.nick + " 1");
-				return;
-    		}
     		
-    		String[] words = message.split(" ");
-    		
-    		// IMPORTANT: OPERATIONS HERE ARE after SPLITTING TO WORDS 
-    		// !points
-    		if(words[0].equalsIgnoreCase("!points") && (words.length == 1)){
-    			pointsRequestedBy(user);
-    			return;
-    		}
+    		try{
+    			if(message.contains(".af/")){
+        			sendMessage(user.getChannel(), "/timeout " + user.nick + " 1");
+    				return;
+        		}
+        		
+        		String[] words = message.split(" ");
+        		
+        		// IMPORTANT: OPERATIONS HERE ARE after SPLITTING TO WORDS 
+        		// !points
+        		if(words[0].equalsIgnoreCase("!points") && (words.length == 1)){
+        			pointsRequestedBy(user);
+        			return;
+        		}
 
-    		// !points <nick>
-    		if(words[0].equalsIgnoreCase("!points") && (words.length == 2)){
-    			if(!user.isModerator() && !user.isAdmin()){
-    				sendMessage(user.getChannel(), "Hey " + user.nick + ". Only moderators are allowed to ask for points of others.");
+        		// !points <nick>
+        		if(words[0].equalsIgnoreCase("!points") && (words.length == 2)){
+        			if(!user.isModerator() && !user.isAdmin()){
+        				sendMessage(user.getChannel(), "Hey " + user.nick + ". Only moderators are allowed to ask for points of others.");
+        				return;
+        			}
+        			pointsRequestedOf(words[1], user);
+        			return;
+        		}
+        		
+        		// !points <add|remove> <username> <number>
+        		if(words[0].equalsIgnoreCase("!points") && (words.length == 4)){
+        			if(!user.isModerator() && !user.isAdmin()){
+        				sendMessage(user.getChannel(), "Hey " + user.nick + ". Only moderators are allowed to add or remove points from others.");
+        				return;
+        			}
+        			handleAddOrRemovePoints(words, user);
+        			return;
+        		}
+        		
+        		// !mmr
+        		if(words[0].equalsIgnoreCase("!mmr") && (words.length == 1)){
+        			sendMessage(user.getChannel(), "Solo MMR = " + getSoloMMR() + ", Party MMR = " + getPartyMMR());
+        			return;
+        		}
+        		
+        		// !mmrpeak
+        		if(words[0].equalsIgnoreCase("!mmrpeak") && (words.length == 1)){
+        			sendMessage(user.getChannel(), "Solo MMR peak = " + getSoloMMRMax() + ", Party MMR peak = " + getPartyMMRMax());
+        			return;
+        		}
+        		
+        		// !mmr <solo|party|solomax|partymax> <newMMR>
+        		if(words[0].equalsIgnoreCase("!mmr") && (words.length == 3)){
+        			if(!user.isModerator() && !user.isAdmin()){
+        				sendMessage(user.getChannel(), "Hey " + user.nick + ". Only moderators are allowed to add or remove points from others.");
+        				return;
+        			}
+        			handleMMRUpdate(user, words);
     				return;
-    			}
-    			pointsRequestedOf(words[1], user);
-    			return;
-    		}
-    		
-    		// !points <add|remove> <username> <number>
-    		if(words[0].equalsIgnoreCase("!points") && (words.length == 4)){
-    			if(!user.isModerator() && !user.isAdmin()){
-    				sendMessage(user.getChannel(), "Hey " + user.nick + ". Only moderators are allowed to add or remove points from others.");
-    				return;
-    			}
-    			handleAddOrRemovePoints(words, user);
-    			return;
-    		}
-    		
-    		// !mmr
-    		if(words[0].equalsIgnoreCase("!mmr") && (words.length == 1)){
-    			sendMessage(user.getChannel(), "Solo MMR = " + getSoloMMR() + ", Party MMR = " + getPartyMMR());
-    			return;
-    		}
-    		
-    		// !mmrpeak
-    		if(words[0].equalsIgnoreCase("!mmrpeak") && (words.length == 1)){
-    			sendMessage(user.getChannel(), "Solo MMR peak = " + getSoloMMRMax() + ", Party MMR peak = " + getPartyMMRMax());
-    			return;
-    		}
-    		
-    		// !mmr <solo|party|solomax|partymax> <newMMR>
-    		if(words[0].equalsIgnoreCase("!mmr") && (words.length == 3)){
-    			if(!user.isModerator() && !user.isAdmin()){
-    				sendMessage(user.getChannel(), "Hey " + user.nick + ". Only moderators are allowed to add or remove points from others.");
-    				return;
-    			}
-    			handleMMRUpdate(user, words);
-				return;
-    		}
-    		
-    		// !start
-    		if(words[0].equalsIgnoreCase("!start") && (words.length == 1)){
-    			if(!user.isModerator() && !user.isAdmin()){
-    				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to start a new round of guessing.");
-    				return;
-    			}
-    			startGuessing(user);
-    			return;
-    		}
-    		
-    		// !start <whattoguess>
-    		if(words[0].equalsIgnoreCase("!start") && (words.length == 2)){
-    			if(!user.isModerator() && !user.isAdmin()){
-    				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to start a new round of guessing.");
-    				return;
-    			}
-    			if(words[1].equalsIgnoreCase("death")){
-    				whatIsGuessed = 1;
-    				startSpecificGuessing(user);
-    				return;
-    			}
-    			if(words[1].equalsIgnoreCase("kills")){
-    				whatIsGuessed = 2;
-    				startSpecificGuessing(user);
-    				return;
-    			}
-    			if(words[1].equalsIgnoreCase("gpm")){
-    				whatIsGuessed = 3;
-    				startSpecificGuessing(user);
-    				return;
-    			}
-    			if(words[1].equalsIgnoreCase("xpm")){
-    				whatIsGuessed = 4;
-    				startSpecificGuessing(user);
-    				return;
-    			}
-    		}
-    		
-    		// !guess
-    		if(words[0].equalsIgnoreCase("!guess") && (words.length == 2)){
-				if(guessLock){
-					sendMessage(user.getChannel(), "Hey " + user.nick + ", guessing is currently disabled. Please wait until the new round is started.");
-					return;
-				}
-    			if(isThisANumber(words[1])){
-					handleUserGuess(Integer.parseInt(words[1]), user);
-					return;
-				}else{
-					sendMessage(user.getChannel(), "Hey " + user.nick + ", that's no number. Use !guess <number>.");
-					return;
-				}
-    		}
-    		
-    		// !abort
-    		if(words[0].equalsIgnoreCase("!abort") && (words.length == 1)){
-    			if(!user.isModerator() && !user.isAdmin()){
-    				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to abort guessing.");
-    				return;
-    			}
-    			handleAbort(user);
-    			return;
-    		}	
-    		
-    		// !restart
-    		if(words[0].equalsIgnoreCase("!restart") && (words.length == 1)){
-    			if(!user.isModerator() && !user.isAdmin()){
-    				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to restart guessing.");
-    				return;
-    			}
-    			handleRestart(user);
-    			return;
-    		}
-    		
-    		// !result
-    		if(words[0].equalsIgnoreCase("!result") && (words.length == 2)){
-    			if(!user.isModerator() && !user.isAdmin()){
-    				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to provide a result.");
-    				return;
-    			}
-    			if(isThisANumber(words[1])){
-					handleResultAndRewards(user, Integer.parseInt(words[1]));
-					return;
-				}else{
-					sendMessage(user.getChannel(), "Hey " + user.nick + ", that's no number. Use !result <number>.");
-					return;
-				}
-    		}	
-    		
-    		// !whatDidWeGuess
-    		if(words[0].equalsIgnoreCase("!WhatDidWeGuess") && (words.length == 1)){
-    			handleWhatDidWeGuess(user);
-    			return;
-    		}
-    		
-    		// !herorequest
-    		if(words[0].equalsIgnoreCase("!herorequest") && ( (words.length == 2) || (words.length == 3) ) ){
-    			handleHerorequest(words, user);
-    			return;
-    		}
-    		
-    		// !hrdone
-    		if(words[0].equalsIgnoreCase("!hrdone") && words.length == 1){
-    			handleHRDone();
-    			return;
-    		}
-    		
-    		// !replayanalysis
-    		if(words[0].equalsIgnoreCase("!replayanalysis") && words.length == 1){
-    			handleReplayanalsyse(user);
-    			return;
-    		}
-    		
-    		// !itembundle
-    		if(words[0].equalsIgnoreCase("!itembundle") && words.length == 1){
-    			handleItembundlerequest(user);
-    			return;
+        		}
+        		
+        		// !start
+        		if(words[0].equalsIgnoreCase("!start") && (words.length == 1)){
+        			if(!user.isModerator() && !user.isAdmin()){
+        				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to start a new round of guessing.");
+        				return;
+        			}
+        			startGuessing(user);
+        			return;
+        		}
+        		
+        		// !start <whattoguess>
+        		if(words[0].equalsIgnoreCase("!start") && (words.length == 2)){
+        			if(!user.isModerator() && !user.isAdmin()){
+        				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to start a new round of guessing.");
+        				return;
+        			}
+        			if(words[1].equalsIgnoreCase("death")){
+        				whatIsGuessed = 1;
+        				startSpecificGuessing(user);
+        				return;
+        			}
+        			if(words[1].equalsIgnoreCase("kills")){
+        				whatIsGuessed = 2;
+        				startSpecificGuessing(user);
+        				return;
+        			}
+        			if(words[1].equalsIgnoreCase("gpm")){
+        				whatIsGuessed = 3;
+        				startSpecificGuessing(user);
+        				return;
+        			}
+        			if(words[1].equalsIgnoreCase("xpm")){
+        				whatIsGuessed = 4;
+        				startSpecificGuessing(user);
+        				return;
+        			}
+        		}
+        		
+        		// !guess
+        		if(words[0].equalsIgnoreCase("!guess") && (words.length == 2)){
+    				if(guessLock){
+    					sendMessage(user.getChannel(), "Hey " + user.nick + ", guessing is currently disabled. Please wait until the new round is started.");
+    					return;
+    				}
+        			if(isThisANumber(words[1])){
+    					handleUserGuess(Integer.parseInt(words[1]), user);
+    					return;
+    				}else{
+    					sendMessage(user.getChannel(), "Hey " + user.nick + ", that's no number. Use !guess <number>.");
+    					return;
+    				}
+        		}
+        		
+        		// !abort
+        		if(words[0].equalsIgnoreCase("!abort") && (words.length == 1)){
+        			if(!user.isModerator() && !user.isAdmin()){
+        				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to abort guessing.");
+        				return;
+        			}
+        			handleAbort(user);
+        			return;
+        		}	
+        		
+        		// !restart
+        		if(words[0].equalsIgnoreCase("!restart") && (words.length == 1)){
+        			if(!user.isModerator() && !user.isAdmin()){
+        				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to restart guessing.");
+        				return;
+        			}
+        			handleRestart(user);
+        			return;
+        		}
+        		
+        		// !result
+        		if(words[0].equalsIgnoreCase("!result") && (words.length == 2)){
+        			if(!user.isModerator() && !user.isAdmin()){
+        				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to provide a result.");
+        				return;
+        			}
+        			if(isThisANumber(words[1])){
+    					handleResultAndRewards(user, Integer.parseInt(words[1]));
+    					return;
+    				}else{
+    					sendMessage(user.getChannel(), "Hey " + user.nick + ", that's no number. Use !result <number>.");
+    					return;
+    				}
+        		}	
+        		
+        		// !whatDidWeGuess
+        		if(words[0].equalsIgnoreCase("!WhatDidWeGuess") && (words.length == 1)){
+        			handleWhatDidWeGuess(user);
+        			return;
+        		}
+        		
+        		// !herorequest
+        		if(words[0].equalsIgnoreCase("!herorequest") && ( (words.length == 2) || (words.length == 3) ) ){
+        			handleHerorequest(words, user);
+        			return;
+        		}
+        		
+        		// !hrdone
+        		if(words[0].equalsIgnoreCase("!hrdone") && words.length == 1){
+        			handleHRDone();
+        			return;
+        		}
+        		
+        		// !replayanalysis
+        		if(words[0].equalsIgnoreCase("!replayanalysis") && words.length == 1){
+        			handleReplayanalsyse(user);
+        			return;
+        		}
+        		
+        		// !itembundle
+        		if(words[0].equalsIgnoreCase("!itembundle") && words.length == 1){
+        			handleItembundlerequest(user);
+        			return;
+        		}	
+    		}catch (Exception e){
+    			e.printStackTrace();
     		}
     		
     	}
