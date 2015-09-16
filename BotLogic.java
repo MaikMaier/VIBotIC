@@ -1,4 +1,4 @@
-    public class BotLogic{
+   public class BotLogic{
     	private Connection connection = null;  
 
 //    	Prices
