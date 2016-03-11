@@ -1,4 +1,33 @@
-  	public BotLogic(){
+    public class BotLogic{
+    	private java.sql.Connection connection = null;  
+
+//    	Prices
+    	final Integer POINTS_ON_CORRECT_GUESS = 100;
+    	final Integer HEROREQUEST_PRICE = 500;
+    	final Integer SONGREQUEST_PRICE = 500;
+    	final Integer ITEMBUNDLE_PRICE = 1000;
+    	final Integer REPLAYANALYSIS_PRICE = 1000;
+    	final Integer CUSTOMCOMMAND_PRICE = 1000;
+    	final Integer TOLERANCE = 10;
+    	
+//    	Guessingstatus related
+    	boolean guessingroundActive;
+    	int whatIsGuessed;
+		boolean guessLock = true;
+		int guessCount = 0;
+		int guessroundID = 0;
+    	
+//		Reward related
+		boolean herorequestActive;
+		boolean requestSongActive;
+		String requestedHero;
+		String requestedSong;
+		int herorequestID = 0;
+		
+    	/**
+        * Constructor that opens the DB-Connection
+        */
+    	public BotLogic(){
     		try {
 				Class.forName( "org.sqlite.JDBC" );
 				connection = DriverManager.getConnection( "jdbc:sqlite:./BotDB.db", "", "" );
@@ -54,13 +83,7 @@
         		
         		// !mmr
         		if(words[0].equalsIgnoreCase("!mmr") && (words.length == 1)){
-        			sendMessage(user.getChannel(), "Solo MMR = " + getSoloMMR() + ", Party MMR = " + getPartyMMR());
-        			return;
-        		}
-        		
-        		// !mmrpeak
-        		if(words[0].equalsIgnoreCase("!mmrpeak") && (words.length == 1)){
-        			sendMessage(user.getChannel(), "Solo MMR peak = " + getSoloMMRMax() + ", Party MMR peak = " + getPartyMMRMax());
+        			sendMessage(user.getChannel(), "Solo MMR = " + getSoloMMR() + "(highest: " + getSoloMMRMax() +  "), Party MMR = " + getPartyMMR() + "(highest: " + getPartyMMRMax() + ")" );
         			return;
         		}
         		
@@ -90,6 +113,10 @@
         				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to start a new round of guessing.");
         				return;
         			}
+                	if(guessingroundActive){
+                		sendMessage(user.getChannel(), "Hey " + user.nick + ", there's already a round of guessing active. Please end this first with !result <number> or !abort it");
+            			return;
+               		}
         			if(words[1].equalsIgnoreCase("death")){
         				whatIsGuessed = 1;
         				startSpecificGuessing(user);
@@ -176,6 +203,10 @@
         		
         		// !hrdone
         		if(words[0].equalsIgnoreCase("!hrdone") && words.length == 1){
+        			if(!user.isModerator() && !user.isAdmin()){
+        				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to end a herorequest.");
+        				return;
+        			}
         			handleHRDone();
         			return;
         		}
@@ -190,7 +221,83 @@
         		if(words[0].equalsIgnoreCase("!itembundle") && words.length == 1){
         			handleItembundlerequest(user);
         			return;
-        		}	
+        		}
+        		
+        		// !song
+        		if(words[0].equalsIgnoreCase("!song") && words.length == 1){
+        			handleSongtitleRequest(user);
+        			return;
+        		}
+        		
+        		// !playlist
+        		if(words[0].equalsIgnoreCase("!playlist") && words.length == 1){
+        			handlePlaylistRequest(user);
+        			return;
+        		}
+        		
+        		// !requestsong
+        		if(words[0].equalsIgnoreCase("!requestsong") && words.length >= 2){
+        			handleRequestSong(words, user);
+        			return;
+        		}
+        		
+        		// !srdone
+        		if(words[0].equalsIgnoreCase("!srdone") && words.length == 1){
+        			if(!user.isModerator() && !user.isAdmin()){
+        				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to finish a song request.");
+        				return;
+        			}
+        			handleSRDone();
+        			return;
+        		}
+        		
+        		// !requestCustomCommand
+        		if(words[0].equalsIgnoreCase("!requestcustomcommand") && words.length >= 2){
+        			handleRequestCustomCommand(words, user);
+        			return;
+        		}
+        		
+        		// !top <Zahl>
+        		if(words[0].equalsIgnoreCase("!top") && words.length == 2){
+        			if(!user.isModerator() && !user.isAdmin()){
+        				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to request that.");
+        				return;
+        		}
+        			if(isThisANumber(words[1])){
+        				if(Double.parseDouble(words[1]) > 15){
+        					sendMessage(user.getChannel(), "Sorry, you can only request up to top 15");
+        					return;
+        				}
+        				handleTopRequest(words, user);
+            			return;
+    				}else{
+    					sendMessage(user.getChannel(), "Hey " + user.nick + ", that's no number. Use !top <number>.");
+    					return;
+    				}
+        		}
+        		
+        		// !top
+        		if(words[0].equalsIgnoreCase("!top") && words.length == 1){
+        			if(!user.isModerator() && !user.isAdmin()){
+        				sendMessage(user.getChannel(), "Hey " + user.nick + ", only moderators are allowed to request that.");
+        				return;
+        			}
+        			else{
+        				words = new String[2];
+        				words[1] = "5";
+        				handleTopRequest(words, user);
+        			}
+        		}
+        		
+        		// !toplist
+        		if(words[0].equalsIgnoreCase("!toplist") && words.length == 1){
+        			if(user.isModerator() || user.isAdmin()){
+        				handleToplist();
+        			}
+        		}
+        		
+        		
+        			
     		}catch (Exception e){
     			e.printStackTrace();
     		}
@@ -201,6 +308,15 @@
     	
 //----------------------------Command Handling & Helper Methods--------------------------------------------------------------------
     
+    	//      -----Playlist Related-----
+    	public void handleSongtitleRequest(User user){
+    		sendMessage(user.getChannel(), "Hey " + user.nick + ", i can't tell you the exact name, but it could be listed on this Spotify Playlist: https://open.spotify.com/user/squirrelthroat/playlist/2tLn8Sa76h5TIMHi4zHYZ3");
+    	}
+    	
+    	public void handlePlaylistRequest(User user){
+    		sendMessage(user.getChannel(), "Hey " + user.nick + ", VITALIC is always playing his local files. The song could be listed on the spotify playlist tho. You can find it here: https://open.spotify.com/user/squirrelthroat/playlist/2tLn8Sa76h5TIMHi4zHYZ3");
+    		sendMessage(user.getChannel(), "Please keep in mind that this playlist is not complete, we're working on it.");
+    	}
     	//    	-----Guessing Related-----
     	public void handleWhatDidWeGuess(User user){
     		if(whatIsGuessed == 1){
@@ -258,7 +374,7 @@
 	    			while (resultSet.next()) {
 	    				String username = resultSet.getString(1);
 	    				int guess = resultSet.getInt(2);
-	    				if((guess <= (result + 25)) && (guess >= (result - 25)) ){
+	    				if((guess <= (result + TOLERANCE)) && (guess >= (result - TOLERANCE)) ){
 	    					addPointsToUser(username.toLowerCase(), POINTS_ON_CORRECT_GUESS);
 	    					winners.add(username.toLowerCase());
 	    				}
@@ -278,12 +394,16 @@
 			
 			if(winnerCount == 0){
 				sendMessage(user.getChannel(), "Noone guessed correctly. Good luck next time!");
+				g.printMessage("Quiz Information", user, "No Winners.", false, "none");
 			}else if(winnerCount == 1){
 				sendMessage(user.getChannel(), "We had only one winner this time. Congratulations to: " + winnerList);
+				g.printMessage("Quiz Information", user, " ended the guessing round. 1 Winner: " + winnerList , false, "none");
 			}else{
 				float winnerCountFloat = (float) winnerCount;
 				float percentage = (winnerCountFloat * 100 / guessCount);
 				sendMessage(user.getChannel(), "We had " + winnerCount + " winners this time! That means, that " + String.format("%.02f", percentage) + "% of all entries were correct. Congratulations to: " + winnerList);
+				g.printMessage("Quiz Information", user, " ended the guessing round." + winnerCount + "(" + String.format("%.02f", percentage) + ") " +  "Winners: " + winnerList , false, "none");
+
 			}
 			guessLock = true;
     		deleteAllGuesses();
@@ -319,6 +439,8 @@
     		handleAbort(user);
     		sendMessage(user.getChannel(), "Lets start this all over again. All guesses got deleted.");
     		startGuessing(user);
+    		g.printMessage("Quiz Information", user, " restartet the active guessing round.", false, "none");
+
     	}
     	
     	public void handleAbort(User user){
@@ -333,6 +455,8 @@
     		guessroundID++;
     		endBettingPhase();
     		sendMessage(user.getChannel(), "Okay, all guesses deleted, the active round got stopped.");
+    		g.printMessage("Quiz Information", user, " stopped the active guessing round.", false, "none");
+
     	}
     	
     	public void handleUserGuess(int guessedValue, User user){
@@ -345,8 +469,8 @@
 	    			guessCount = guessCount + 1;
 	    			return;
 	    		}
-	    		if( (whatIsGuessed == 3) && guessedValue <= 50){
-	    			sendMessage(user.getChannel(), "Hey " + user.nick + ", i got that,  but are you sure you want to guess that low? We're guessing GPM currently!");
+	    		if( (whatIsGuessed == 4) && guessedValue <= 50){
+	    			sendMessage(user.getChannel(), "Hey " + user.nick + ", i got that,  but are you sure you want to guess that low? We're guessing XPM currently!");
 	    			insertGuessIntoDB(user.nick.toLowerCase(), guessedValue);
 	    			guessCount = guessCount + 1;
 	    			return;
@@ -428,44 +552,51 @@
         		sendMessage(user.getChannel(), "Hey " + user.nick + ", there's already a round of guessing active. Please end this first with !result <number> or !abort it");
     			return;
        		}
-        	sendMessage(user.getChannel(), "/subscribers");
         	sendMessage(user.getChannel(), "A new round of guessing has started. Viewers can now guess the outcome of the current game");
         	startBettingPhase();
         	whatIsGuessed = randInt(1, 4);
         	sendGuessPhaseStartMessage(whatIsGuessed, user);
         	sendMessage(user.getChannel(), "You can now use the command !guess <number> to make a guess. ");
-        	writeLater(7, "/me Good luck, let's go!", user, guessroundID);
-        	writeLater(8, "/subscribersoff", user, guessroundID);
+        	sendMessage(user.getChannel(), "/me Good luck, let's go!");
+        	writeLater(120, "/me 3 Minutes left to place your guess", user, guessroundID);
         	writeLater(180, "/me 2 Minutes left to place your guess", user, guessroundID);
-//        	180
         	writeLater(240, "/me 1 Minute left to place your guess", user, guessroundID);
-//        	240
         	delayEndBettingPhase(301, guessroundID);
-//        	301
         	sendGuessingLockedMessage(300, user, guessroundID);
-//        	300
+        	String WhatIsGuessedString = null;
+    		if(whatIsGuessed == 1){
+    			WhatIsGuessedString = "Death";
+    		}else if(whatIsGuessed == 2){
+    			WhatIsGuessedString = "Kills";
+    		}else if(whatIsGuessed == 3){
+    			WhatIsGuessedString = "GPM";
+    		}else if(whatIsGuessed == 4){
+    			WhatIsGuessedString = "XPM";
+    		}
+        	g.printMessage("Quiz Information", user, " started a new round: " + WhatIsGuessedString, false, "none");
     	}
     	
     	public void startSpecificGuessing(User user){
-        	if(guessingroundActive){
-        		sendMessage(user.getChannel(), "Hey " + user.nick + ", there's already a round of guessing active. Please end this first with !result <number> or !abort it");
-    			return;
-       		}
-        	sendMessage(user.getChannel(), "/subscribers");
         	sendMessage(user.getChannel(), "A new round of guessing has started. Viewers can now guess the outcome of the current game");
         	startBettingPhase();
         	sendGuessPhaseStartMessage(whatIsGuessed, user);
         	sendMessage(user.getChannel(), "You can now use the command !guess <number> to make a guess. ");
         	writeLater(7, "/me Good luck, let's go!", user, guessroundID);
-        	writeLater(8, "/subscribersoff", user, guessroundID);
         	writeLater(180, "/me 2 Minutes left to place your guess", user, guessroundID);
-//        	180
         	writeLater(240, "/me 1 Minute left to place your guess", user, guessroundID);
-//        	240
         	delayEndBettingPhase(301, guessroundID);
-//        	301
         	sendGuessingLockedMessage(300, user, guessroundID);
-//        	300
+        	String WhatIsGuessedString = null;
+    		if(whatIsGuessed == 1){
+    			WhatIsGuessedString = "Death";
+    		}else if(whatIsGuessed == 2){
+    			WhatIsGuessedString = "Kills";
+    		}else if(whatIsGuessed == 3){
+    			WhatIsGuessedString = "GPM";
+    		}else if(whatIsGuessed == 4){
+    			WhatIsGuessedString = "XPM";
+    		}
+        	g.printMessage("Quiz Information", user, " started a new round: " + WhatIsGuessedString, false, "none");
     	}
 
     	public void sendGuessPhaseStartMessage(int whatIsGuessed, User user){
@@ -474,9 +605,9 @@
     		}else if(whatIsGuessed == 2){
     			sendMessage(user.getChannel(), "/me How many kills will VITALIC achieve?");
     		}else if(whatIsGuessed == 3){
-    			sendMessage(user.getChannel(), "/me How much GPM will VITALIC achieve in this game? Every guess is allowed to be up to 25 points off of the result to be accepted as correct.");
+    			sendMessage(user.getChannel(), "/me How much GPM will VITALIC achieve in this game? Every guess is allowed to be up to " + TOLERANCE + " points off of the result to be accepted as correct.");
     		}else if(whatIsGuessed == 4){
-    			sendMessage(user.getChannel(), "/me How much XPM will VITALIC achieve in this game? Every guess is allowed to be up to 25 points off of the result to be accepted as correct.");
+    			sendMessage(user.getChannel(), "/me How much XPM will VITALIC achieve in this game? Every guess is allowed to be up to " + TOLERANCE + " points off of the result to be accepted as correct.");
     		}
     	}
     	
@@ -527,24 +658,25 @@
        		removePointsFromUser(user.nick, HEROREQUEST_PRICE, user);
        		addRedeemedPointsTo(user, HEROREQUEST_PRICE);
        		
+       		g.printMessage("Requests", user, " just requested " + requestedHero + " to be played.", false, "none");
        		sendMessage(user.getChannel(), user.nick + " just requested " + requestedHero + " to be played. VITALIC_DOTA2 will play that hero in the next game");
-       		herorequestReminder(user, herorequestID);
+//       		herorequestReminder(user, herorequestID);
        	}
        	
-       	public void herorequestReminder(User user, int IDThatNeedsToStayTheSame){
-       		new java.util.Timer().schedule( 
-	    	        new java.util.TimerTask() {
-	    	            @Override
-	    	            public void run() {
-	    	            	if(IDThatNeedsToStayTheSame == herorequestID){
-	    	            		sendMessage(user.getChannel(), "There's still an open herorequest from " + user.nick + ". He requested " + requestedHero + " to be played.");
-	    	            		herorequestReminder(user, IDThatNeedsToStayTheSame);
-	    	            	}
-	    	            }
-	    	        }, 
-	    	        1000*600 
-	    	);
-       	}
+//       	public void herorequestReminder(User user, int IDThatNeedsToStayTheSame){
+//       		new java.util.Timer().schedule( 
+//	    	        new java.util.TimerTask() {
+//	    	            @Override
+//	    	            public void run() {
+//	    	            	if(IDThatNeedsToStayTheSame == herorequestID){
+//	    	            		sendMessage(user.getChannel(), "There's still an open herorequest from " + user.nick + ". He requested " + requestedHero + " to be played.");
+//	    	            		herorequestReminder(user, IDThatNeedsToStayTheSame);
+//	    	            	}
+//	    	            }
+//	    	        }, 
+//	    	        1000*600 
+//	    	);
+//       	}
 
        	public void handleHRDone(){
        		requestedHero = "";
@@ -552,6 +684,58 @@
        		herorequestID++;
        	}
        	
+       	public void handleRequestSong(String[] words, User user){
+       		if(requestSongActive){
+       			sendMessage(user.getChannel(), "Sorry " + user.nick + ", there's already an active song request. Please wait until that one is finished.");
+       			return;
+       		}
+       		Integer pointsOfRequestingUser = getPointsof(user.nick);
+       		if(pointsOfRequestingUser < SONGREQUEST_PRICE){
+       			sendMessage(user.getChannel(), "Sorry " + user.nick + ", requesting a song costs " + SONGREQUEST_PRICE.toString() + " points. You've only got " + pointsOfRequestingUser.toString() + ".");
+       			return;
+       		}
+       		
+       		if(words.length == 2){
+       			requestedSong = words[1];
+       		}
+       		else if(words.length == 3){
+       			requestedSong = words[1] + " " + words [2]; 
+       		}
+       		else if(words.length == 4){
+       			requestedSong = words[1] + " " + words [2] + " " + words [3]; 
+       		}
+       		else if(words.length == 5){
+       			requestedSong = words[1] + " " + words [2] + " " + words [3] + " " + words [4]; 
+       		}
+       		else if(words.length == 6){
+       			requestedSong = words[1] + " " + words [2] + " " + words [3] + " " + words [4] + " " + words [5]; 
+       		}
+       		else if(words.length == 7){
+       			requestedSong = words[1] + " " + words [2] + " " + words [3] + " " + words [4] + " " + words [5] + " " + words [6]; 
+       		}
+       		else if(words.length == 8){
+       			requestedSong = words[1] + " " + words [2] + " " + words [3] + " " + words [4] + " " + words [5] + " " + words [6] + " " + words [7]; 
+       		}
+       		else if(words.length == 9){
+       			requestedSong = words[1] + " " + words [2] + " " + words [3] + " " + words [4] + " " + words [5] + " " + words [6] + " " + words [7] + " " + words [8]; 
+       		}
+       		else{
+       			requestedSong = words[1] + " " + words [2] + " " + words [3] + " " + words [4] + " " + words [5] + " " + words [6] + " " + words [7] + " " + words [8]; 
+       		}
+       		
+       		requestSongActive = true;
+       		removePointsFromUser(user.nick, SONGREQUEST_PRICE, user);
+       		addRedeemedPointsTo(user, SONGREQUEST_PRICE);
+       		
+       		g.printMessage("Requests", user, " just requested the song \"" + requestedSong + "\" to be played.", false, "none");
+       		sendMessage(user.getChannel(), user.nick + " just requested \"" + requestedSong + "\" to be played. VITALIC_DOTA2 will play that that soon.");
+//       		herorequestReminder(user, herorequestID);
+       	}
+       	
+       	public void handleSRDone(){
+       		requestedSong = "";
+       		requestSongActive = false;
+       	}
        	
        	//     -----ReplayAnalysis Related-----
        	
@@ -566,30 +750,25 @@
        		removePointsFromUser(user.nick, REPLAYANALYSIS_PRICE, user);
        		addRedeemedPointsTo(user, REPLAYANALYSIS_PRICE);
        		
+       		g.printMessage("Requests", user, " made a replay analysis request.", false, "none");
        		sendMessage(user.getChannel(), user.nick + " just requested a replay analysis. VITALIC_DOTA2 will contact you soon.");
-       		replayAnalysisReminder(user, 3);
+//       		replayAnalysisReminder(user, 3);
        		
-//       		JFrame herorequestReminderWindow = new JFrame();
-//       		herorequestReminderWindow.setName("Replayanalysis requested");
-//       		herorequestReminderWindow.setSize(300, 100);
-//       		JTextArea windowText = new JTextArea("Replayanalysis by " + user.nick);
-//       		herorequestReminderWindow.add(windowText);
-//       		
-//       		herorequestReminderWindow.setVisible(true);
        	}
        	
-       	public void replayAnalysisReminder(User user, int howOftenToRepeat){
-       		new java.util.Timer().schedule( 
-	    	        new java.util.TimerTask() {
-	    	            @Override
-	    	            public void run() {
-	    	            		sendMessage(user.getChannel(), "VITALIC_DOTA2, " +  user.nick + " made a replay analysis request.");
-	    	            		herorequestReminder(user, howOftenToRepeat-1);
-	    	            }
-	    	        }, 
-	    	        1000*600 
-	    	);
-       	}
+//       	public void replayAnalysisReminder(User user, int howOftenToRepeat){
+//       		new java.util.Timer().schedule( 
+//	    	        new java.util.TimerTask() {
+//	    	            @Override
+//	    	            public void run() {
+//	    	            		
+//	    	            		sendMessage(user.getChannel(), "VITALIC_DOTA2, " +  user.nick + " made a replay analysis request.");
+////	    	            		herorequestReminder(user, howOftenToRepeat-1);
+//	    	            }
+//	    	        }, 
+//	    	        1000*600 
+//	    	);
+//       	}
        	
        	public void handleItembundlerequest(User user){
        		Integer pointsOfRequestingUser = getPointsof(user.nick);
@@ -600,33 +779,105 @@
        		
        		removePointsFromUser(user.nick, ITEMBUNDLE_PRICE, user);
        		addRedeemedPointsTo(user, ITEMBUNDLE_PRICE);
-       		
+       		g.printMessage("Requests", user, " just requested an itembundle.", false, "none");
        		sendMessage(user.getChannel(), user.nick + " just requested an itembundle. VITALIC_DOTA2 will contact you soon.");
-       		itembundleReminder(user, 3);
        		
-//       		JFrame itembundleReminderWindow = new JFrame();
-//       		itembundleReminderWindow.setName("itembundle requested");
-//       		itembundleReminderWindow.setSize(300, 100);
-//       		JTextArea windowText = new JTextArea("Itembundle requested by " + user.nick);
-//       		itembundleReminderWindow.add(windowText);
-//       		
-//       		itembundleReminderWindow.setVisible(true);
+       		//       		itembundleReminder(user, 3);
+       		
        	}
        	
-       	public void itembundleReminder(User user, int howOftenToRepeat){
-       		new java.util.Timer().schedule( 
-	    	        new java.util.TimerTask() {
-	    	            @Override
-	    	            public void run() {
-	    	            		sendMessage(user.getChannel(), "VITALIC_DOTA2, " +  user.nick + " made an itembundle request.");
-	    	            		herorequestReminder(user, howOftenToRepeat-1);
-	    	            }
-	    	        }, 
-	    	        1000*600 
-	    	);
+//       	public void itembundleReminder(User user, int howOftenToRepeat){
+//       		new java.util.Timer().schedule( 
+//	    	        new java.util.TimerTask() {
+//	    	            @Override
+//	    	            public void run() {
+//	    	            		sendMessage(user.getChannel(), "VITALIC_DOTA2, " +  user.nick + " made an itembundle request.");
+//	    	            		herorequestReminder(user, howOftenToRepeat-1);
+//	    	            }
+//	    	        }, 
+//	    	        1000*600 
+//	    	);
+//       	}
+       	
+       	public void handleRequestCustomCommand(String[] words, User user){
+       		Integer pointsOfRequestingUser = getPointsof(user.nick);
+       		if(pointsOfRequestingUser < CUSTOMCOMMAND_PRICE){
+       			sendMessage(user.getChannel(), "Sorry " + user.nick + ", a custom command costs " + CUSTOMCOMMAND_PRICE.toString() + " points. You've only got " + pointsOfRequestingUser.toString() + ".");
+       			return;
+       		}
+       		String customCommand = "";
+       		for (int i = 1; i < words.length; i++) {
+				customCommand = customCommand.concat(words[i] + " ");
+			}
+       		g.printMessage("Requests", user, " just requested an custom command: " + customCommand , false, "none");
+       		sendMessage(user.getChannel(), user.nick + " just requested a custom command. VITALIC_DOTA2 will take a look at it soon.");
+       		removePointsFromUser(user.nick, CUSTOMCOMMAND_PRICE, user);
+       		addRedeemedPointsTo(user, CUSTOMCOMMAND_PRICE);
        	}
 
-       	//      -----MMR Related-----
+       	//     -----TopRequest Related-----
+       	
+       	public ResultSet retrieveTop(int howMany){
+    		String selectSQL = "SELECT NAME, POINTS FROM USERS ORDER BY POINTS DESC LIMIT 100";
+			PreparedStatement preparedStatement;
+			try {
+				preparedStatement = connection.prepareStatement(selectSQL);
+//				preparedStatement.setInt(1, howMany);
+				ResultSet resultSet = preparedStatement.executeQuery();
+    			return resultSet;
+			} catch (SQLException e) {
+				g.printMessage("ERROR", MyUser, " Fataler Fehler bei SQL Query in retrieveTop().", false, "none");
+				e.printStackTrace();
+			}
+			return null;
+       	}
+       	
+       	public void handleTopRequest(String[] words, User user){
+       		if(!isThisANumber(words[1])){
+       			sendMessage(user.getChannel(), "That's no number mate...");
+				return;
+			}else{
+				Integer howMany = Integer.valueOf(words[1]);
+				if(howMany.equals(0)){
+					sendMessage(user.getChannel(), "Request more than 0 please...");
+					return;
+				}
+				ResultSet resultSet = retrieveTop(howMany);
+				sendMessage(user.getChannel(), "Here are the top " +howMany+ ":");
+				try {
+					String resultString = "1: " + resultSet.getString(1) + " with " + resultSet.getInt(2) + " Points";
+					resultSet.next();
+					for (int i = 2; i <= howMany; i++) {
+						resultSet.next();
+						resultString = resultString.concat(", " + (i) + ": "  + resultSet.getString(1) + " with " + resultSet.getInt(2) + " Points");
+					}
+					sendMessage(user.getChannel(), resultString);
+				} catch (Exception e) {
+					g.printMessage("ERROR", MyUser, " Fataler Fehler bei handleTopRequest().", false, "none");
+					return;
+				}
+			}
+       	}
+       	
+       	public void handleToplist(){
+			ResultSet resultSet = retrieveTop(50);
+			try {
+				g.printMessage("Toplist", MyUser, "1: " + resultSet.getString(1) + " with " + resultSet.getInt(2) + " Points.", false, "none");
+				resultSet.next();
+				for (int i = 2; i <= 50; i++) {
+					resultSet.next();
+					g.printMessage("Toplist", MyUser, "" + i + ": "  + resultSet.getString(1) + " with " + resultSet.getInt(2) + " Points.", false, "none");
+				}
+			} catch (Exception e) {
+				g.printMessage("ERROR", MyUser, " Fataler Fehler bei handleToplist().", false, "none");
+				return;
+			}
+			
+       	}
+       	
+       	
+       	
+       	
        	
        	//    	-----MMR Related-----
     	public void updateSoloMMR(int newMMR){
@@ -833,6 +1084,7 @@
 	    	            public void run() {
 	    	            	if(idThatNeedsToStayTheSame == guessroundID){
 	    	            		sendMessage(auftraggeber.getChannel(), "/me guessing is now locked. We had " + guessCount + " valid guesses this round. Good luck to everybody!");
+	    	            		g.printMessage("Quiz Information", auftraggeber, guessCount + " valid guesses recieved.", false, "none");
 	    	            	}
 	    	            }
 	    	        }, 
